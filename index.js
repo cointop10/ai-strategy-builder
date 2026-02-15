@@ -67,7 +67,7 @@ Rules:
 - Respond in SAME LANGUAGE as the description
 - Be concise: 1-2 sentences each field
 - If description mentions indicators not in the selected list, still summarize
-- TP/SL: extract exact % or values if mentioned`
+- TP/SL: extract exact % or values if mentioned. If user says "you decide" or delegates to AI, recommend reasonable defaults (e.g., TP 3-5%, SL 1-2%)`
         }]
       })
     });
@@ -295,6 +295,9 @@ return {
 
 11. **BE CONCISE** - Keep code under 4000 tokens
 12. **Test Your Logic** - Ensure entry/exit signals make sense
+13. **If user delegates decisions to AI (e.g., "you decide TP/SL"):**
+- Use reasonable defaults: TP 3-5%, SL 1-2% for scalping; TP 5-10%, SL 3-5% for swing
+- Always include takeProfitPercent and stopLossPercent in parameters
 
 Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
         }]
