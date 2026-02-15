@@ -441,19 +441,23 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
       })
     });
 
-    const uploadData = await uploadResponse.json();
+const uploadData = await uploadResponse.json();
 
-    if (!uploadData.success) {
-      throw new Error(uploadData.error || 'Failed to save strategy');
-    }
+console.log('📥 Workers API Response:', JSON.stringify(uploadData));
 
-    console.log('✅ Strategy saved to database:', uploadData.ea_id);
+if (!uploadData.success) {
+  throw new Error(uploadData.error || 'Failed to save strategy');
+}
 
-    res.json({
-      success: true,
-      strategy_id: uploadData.ea_id,
-      ea_name: strategyName
-    });
+const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
+
+console.log('✅ Strategy saved to database:', strategyId);
+
+res.json({
+  success: true,
+  strategy_id: strategyId,
+  ea_name: strategyName
+});
 
   } catch (error) {
     console.error('❌ Error:', error);
