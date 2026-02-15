@@ -60,8 +60,10 @@ Description: "${strategy_description}"
 If valid trading strategy:
 {"valid":true,"buy":"buy condition summary","sell":"sell condition summary","tp":"take profit (or 'Not specified')","sl":"stop loss (or 'Not specified')","extra":"other info or null"}
 
-If nonsensical/gibberish/not a trading strategy:
+If nonsensical/gibberish/not a trading strategy (random characters, unrelated topics):
 {"valid":false,"reason":"Brief reason why"}
+
+IMPORTANT: Vague but valid requests like "make a scalping strategy", "you decide", "trending strategy", "make something with these indicators" are VALID. Fill in reasonable buy/sell conditions using the selected indicators.
 
 Rules:
 - Respond in SAME LANGUAGE as the description
@@ -295,9 +297,11 @@ return {
 
 11. **BE CONCISE** - Keep code under 4000 tokens
 12. **Test Your Logic** - Ensure entry/exit signals make sense
-13. **If user delegates decisions to AI (e.g., "you decide TP/SL"):**
-- Use reasonable defaults: TP 3-5%, SL 1-2% for scalping; TP 5-10%, SL 3-5% for swing
-- Always include takeProfitPercent and stopLossPercent in parameters
+13. **If description is vague (e.g., "make a scalping strategy", "you decide"):**
+- Create a sensible strategy using ALL selected indicators
+- Use popular/proven parameter combinations
+- Default to scalping style: TP 2-5%, SL 1-3%
+- Combine indicators logically (trend filter + entry signal + confirmation)
 
 Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
         }]
