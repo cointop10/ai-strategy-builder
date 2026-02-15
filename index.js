@@ -53,7 +53,7 @@ app.post('/api/generate-strategy', async (req, res) => {
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 4000,
         messages: [{
           role: 'user',
