@@ -1,0 +1,29 @@
+{
+  "name": "ai-strategy-builder",
+  "version": "1.0.0",
+  "description": "AI-powered crypto trading strategy generator",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "trading",
+    "strategy",
+    "ai",
+    "crypto",
+    "technical-analysis"
+  ],
+  "author": "CoinTop10",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
