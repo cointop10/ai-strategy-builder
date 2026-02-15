@@ -23,7 +23,79 @@ app.get('/ai-strategy', (req, res) => {
   res.sendFile(path.join(__dirname, 'ai-strategy.html'));
 });
 
-// ============ AI 전략 생성 API ============
+// ============ 1단계: AI 전략 확인 (Haiku - 저비용) ============
+app.post('/api/preview-strategy', async (req, res) => {
+  try {
+    const { selected_indicators, strategy_description } = req.body;
+    console.log('👁️ Preview Request');
+    console.log('📊 Indicators:', selected_indicators?.length || 0);
+    console.log('📝 Description:', strategy_description?.length || 0);
+
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    const indicatorsList = selected_indicators.map(ind => {
+      const paramsStr = Object.entries(ind.params).map(([k, v]) => `${k}:${v}`).join(', ');
+      return `${ind.name}${paramsStr ? ` (${paramsStr})` : ''}`;
+    }).join(', ');
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: `Analyze this trading strategy request. Return ONLY JSON, no markdown.
+
+Indicators: ${indicatorsList}
+Description: "${strategy_description}"
+
+If valid trading strategy:
+{"valid":true,"buy":"buy condition summary","sell":"sell condition summary","tp":"take profit (or 'Not specified')","sl":"stop loss (or 'Not specified')","extra":"other info or null"}
+
+If nonsensical/gibberish/not a trading strategy:
+{"valid":false,"reason":"Brief reason why"}
+
+Rules:
+- Respond in SAME LANGUAGE as the description
+- Be concise: 1-2 sentences each field
+- If description mentions indicators not in the selected list, still summarize
+- TP/SL: extract exact % or values if mentioned`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      console.log('❌ Preview API Error:', data.error);
+      return res.status(400).json({ error: data.error.message });
+    }
+
+    const responseText = data.content?.[0]?.text || '';
+    let result;
+    try {
+      result = JSON.parse(responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+    } catch (e) {
+      console.log('⚠️ Preview parse error:', responseText);
+      result = { valid: false, reason: 'AI response parsing error' };
+    }
+
+    console.log('👁️ Preview result:', result.valid ? 'VALID' : 'REJECTED');
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Preview Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ 2단계: AI 전략 생성 API ============
 app.post('/api/generate-strategy', async (req, res) => {
   try {
     const { selected_indicators, strategy_description, custom_name } = req.body;
@@ -120,12 +192,11 @@ These functions are already defined and can be used directly:
 
 4. **Position Sizing (MANDATORY):**
 \`\`\`javascript
-// This is handled automatically - just track balance
-const equity = settings.equityPercent || 10;  // Default 10%
+const equity = settings.equityPercent || 10;
 const lev = settings.market_type === 'futures' ? settings.leverage : 1;
 const rawUSDT = balance * (equity / 100) * lev;
-const positionUSDT = Math.floor(rawUSDT / 100) * 100; // Round to $100
-const positionSize = positionUSDT / entryPrice; // Coin amount (e.g., 0.235 BTC)
+const positionUSDT = Math.floor(rawUSDT / 100) * 100;
+const positionSize = positionUSDT / entryPrice;
 \`\`\`
 
 5. **Trade Tracking (MANDATORY):**
@@ -138,19 +209,16 @@ trades.push({
   side: "LONG" | "SHORT",
   pnl: profitLoss,
   fee: totalFee,
-  size: positionSize,  // IMPORTANT: This is COIN amount (e.g., 0.235 BTC), NOT USDT
+  size: positionSize,
   duration: i - entryIdx,
   order_type: "MARKET" | "BUY LIMIT" | "SELL STOP" | etc,
-  balance: balance  // Current balance after this trade
+  balance: balance
 });
 \`\`\`
 
 6. **Parameters Format (CRITICAL):**
-Extract ALL user-adjustable parameters:
-
 \`\`\`javascript
 {
-  // Indicator parameters (from selected indicators)
   "rsiPeriod": {
     "type": "number",
     "default": 14,
@@ -158,10 +226,8 @@ Extract ALL user-adjustable parameters:
     "max": 100,
     "step": 1,
     "label": "RSI Period",
-    "category": "strategy"  // User can adjust in backtest
+    "category": "strategy"
   },
-  
-  // Entry/Exit parameters (ALWAYS INCLUDE)
   "takeProfitPercent": {
     "type": "number",
     "default": 5,
@@ -179,35 +245,14 @@ Extract ALL user-adjustable parameters:
     "step": 0.5,
     "label": "Stop Loss %",
     "category": "strategy"
-  },
-  
-  // Any other strategy-specific parameters
-  "rsiOverbought": {
-    "type": "number",
-    "default": 70,
-    "min": 50,
-    "max": 90,
-    "step": 1,
-    "label": "RSI Overbought Level",
-    "category": "strategy"
-  },
-  "rsiOversold": {
-    "type": "number",
-    "default": 30,
-    "min": 10,
-    "max": 50,
-    "step": 1,
-    "label": "RSI Oversold Level",
-    "category": "strategy"
   }
 }
 \`\`\`
 
 **IMPORTANT:**
-- ALL parameters must be dynamically adjustable by users in the backtest page
-- Include parameters for: indicator periods, thresholds, take profit, stop loss, filters
+- ALL parameters must be dynamically adjustable
 - Use \`category: "strategy"\` for all user-facing parameters
-- DO NOT include: leverage, equityPercent, feePercent (these are handled in base settings)
+- DO NOT include: leverage, equityPercent, feePercent (handled in base settings)
 
 7. **Include Parameters for Selected Indicators:**
 ${selected_indicators.map(ind => {
@@ -216,15 +261,11 @@ ${selected_indicators.map(ind => {
 
 8. **Stop if Bankrupt:**
 \`\`\`javascript
-if (balance <= 0) {
-  console.log('Bankrupt at candle', i);
-  break;
-}
+if (balance <= 0) { break; }
 \`\`\`
 
 9. **Equity Curve Tracking:**
 \`\`\`javascript
-// Track equity at every candle
 equityCurve.push({
   timestamp: candles[i].timestamp,
   balance: balance,
@@ -236,131 +277,24 @@ equityCurve.push({
 10. **Return Object:**
 \`\`\`javascript
 return {
-  trades: trades,
-  equity_curve: equityCurve,
+  trades, equity_curve: equityCurve,
   roi: ((finalBalance - initialBalance) / initialBalance * 100).toFixed(2),
   mdd: maxDrawdown.toFixed(2),
   win_rate: (winTrades / totalTrades * 100).toFixed(2),
-  total_trades: totalTrades,
-  winning_trades: winTrades,
-  losing_trades: loseTrades,
-  long_trades: longTrades,
-  short_trades: shortTrades,
-  max_profit: maxProfit,
-  max_loss: maxLoss,
-  avg_profit: avgProfit,
-  avg_loss: avgLoss,
-  avg_duration: avgDuration,
-  max_duration: maxDuration,
+  total_trades: totalTrades, winning_trades: winTrades, losing_trades: loseTrades,
+  long_trades: longTrades, short_trades: shortTrades,
+  max_profit: maxProfit, max_loss: maxLoss,
+  avg_profit: avgProfit, avg_loss: avgLoss,
+  avg_duration: avgDuration, max_duration: maxDuration,
   total_fee: totalFee,
   final_balance: finalBalance.toFixed(2),
-  initial_balance: initialBalance,
-  symbol: settings.symbol,
-  timeframe: settings.timeframe,
-  market_type: settings.market_type
+  initial_balance: initialBalance, symbol: settings.symbol,
+  timeframe: settings.timeframe, market_type: settings.market_type
 };
 \`\`\`
 
-11. **BE CONCISE** - Keep code under 4000 tokens:
-- Use short variable names
-- Minimal comments (only critical ones)
-- Combine similar logic
-- Focus on core trading logic
-
-12. **Test Your Logic** - Ensure:
-- Entry/exit signals make sense based on user description
-- Position sizing uses equity % and leverage correctly
-- Fees are calculated properly
-- Balance updates correctly after each trade
-
-**EXAMPLE STRUCTURE:**
-\`\`\`javascript
-function runStrategy(candles, settings) {
-  const closes = candles.map(c => c.close);
-  const highs = candles.map(c => c.high);
-  const lows = candles.map(c => c.low);
-  
-  let balance = settings.initialBalance;
-  let position = null;
-  let trades = [];
-  let equityCurve = [];
-  
-  for (let i = 50; i < candles.length; i++) {
-    // Calculate indicators
-    const rsi = calculateRSI(closes.slice(0, i + 1), settings.rsiPeriod);
-    const stoch = calculateStochastic(highs.slice(0, i + 1), lows.slice(0, i + 1), closes.slice(0, i + 1), settings.stochKPeriod, settings.stochDPeriod);
-    
-    // Entry logic
-    if (!position && rsi < settings.rsiOversold && stoch.k < 20) {
-      // BUY signal
-      const equity = settings.equityPercent || 10;
-      const lev = settings.market_type === 'futures' ? settings.leverage : 1;
-      const positionUSDT = Math.floor(balance * (equity / 100) * lev / 100) * 100;
-      const positionSize = positionUSDT / candles[i].close;
-      const fee = positionUSDT * (settings.feePercent / 100);
-      balance -= fee;
-      position = { type: 'long', entry: candles[i].close, size: positionSize, entryIdx: i, entryFee: fee };
-    }
-    
-    // Exit logic
-    if (position && position.type === 'long') {
-      const profitPercent = ((candles[i].close - position.entry) / position.entry) * 100;
-      
-      if (profitPercent >= settings.takeProfitPercent || profitPercent <= -settings.stopLossPercent || rsi > settings.rsiOverbought) {
-        // SELL signal
-        const exitValue = position.size * candles[i].close;
-        const exitFee = exitValue * (settings.feePercent / 100);
-        const pnl = exitValue - (position.size * position.entry) - position.entryFee - exitFee;
-        balance += exitValue - exitFee;
-        
-        trades.push({
-          entry_time: candles[position.entryIdx].timestamp,
-          entry_price: position.entry,
-          exit_time: candles[i].timestamp,
-          exit_price: candles[i].close,
-          side: 'LONG',
-          pnl: pnl,
-          fee: position.entryFee + exitFee,
-          size: position.size,
-          duration: i - position.entryIdx,
-          order_type: 'MARKET',
-          balance: balance
-        });
-        
-        position = null;
-      }
-    }
-    
-    // Track equity
-    equityCurve.push({
-      timestamp: candles[i].timestamp,
-      balance: balance,
-      equity: balance,
-      drawdown: 0
-    });
-    
-    // Stop if bankrupt
-    if (balance <= 0) break;
-  }
-  
-  // Calculate stats
-  const totalTrades = trades.length;
-  const winTrades = trades.filter(t => t.pnl > 0).length;
-  const finalBalance = balance;
-  
-  return {
-    trades: trades,
-    equity_curve: equityCurve,
-    roi: ((finalBalance - settings.initialBalance) / settings.initialBalance * 100).toFixed(2),
-    mdd: 0,
-    win_rate: totalTrades > 0 ? ((winTrades / totalTrades) * 100).toFixed(2) : 0,
-    total_trades: totalTrades,
-    final_balance: finalBalance.toFixed(2),
-    initial_balance: settings.initialBalance,
-    symbol: settings.symbol
-  };
-}
-\`\`\`
+11. **BE CONCISE** - Keep code under 4000 tokens
+12. **Test Your Logic** - Ensure entry/exit signals make sense
 
 Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
         }]
@@ -419,16 +353,14 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
       return res.status(401).json({ error: 'Authorization required' });
     }
 
-// 전략 이름 생성 (사용자 입력 또는 자동 생성)
-const strategyName = custom_name || (
-  selected_indicators.length > 0
-    ? `AI: ${selected_indicators.slice(0, 3).map(i => i.name).join(' + ')}`
-    : 'AI Strategy'
-);
+    const strategyName = custom_name || (
+      selected_indicators.length > 0
+        ? `AI: ${selected_indicators.slice(0, 3).map(i => i.name).join(' + ')}`
+        : 'AI Strategy'
+    );
 
     console.log('📤 Saving to Workers API:', strategyName);
 
-    // Workers API에 업로드
     const uploadResponse = await fetch('https://cointop10-api.cointop10-com.workers.dev/api/strategies', {
       method: 'POST',
       headers: {
@@ -443,38 +375,38 @@ const strategyName = custom_name || (
       })
     });
 
-const uploadData = await uploadResponse.json();
+    const uploadData = await uploadResponse.json();
 
-console.log('📥 Workers API Response:', JSON.stringify(uploadData));
+    console.log('📥 Workers API Response:', JSON.stringify(uploadData));
 
-if (!uploadData.success) {
-  throw new Error(uploadData.error || 'Failed to save strategy');
-}
+    if (!uploadData.success) {
+      throw new Error(uploadData.error || 'Failed to save strategy');
+    }
 
-const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
+    const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
 
-console.log('✅ Strategy saved to database:', strategyId);
+    console.log('✅ Strategy saved to database:', strategyId);
 
     // 즐겨찾기 자동 추가
-try {
-  await fetch('https://cointop10-library.cointop10-com.workers.dev/api/favorites', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ settings_hash: `untested_${strategyId}` })
-  });
-  console.log('⭐ Auto-favorited');
-} catch (e) {
-  console.log('⚠️ Auto-favorite failed:', e.message);
-}
+    try {
+      await fetch('https://cointop10-library.cointop10-com.workers.dev/api/favorites', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ settings_hash: `untested_${strategyId}` })
+      });
+      console.log('⭐ Auto-favorited');
+    } catch (e) {
+      console.log('⚠️ Auto-favorite failed:', e.message);
+    }
 
-res.json({
-  success: true,
-  strategy_id: strategyId,
-  ea_name: strategyName
-});
+    res.json({
+      success: true,
+      strategy_id: strategyId,
+      ea_name: strategyName
+    });
 
   } catch (error) {
     console.error('❌ Error:', error);
@@ -490,7 +422,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     service: 'ai-strategy-builder',
-    model: 'claude-sonnet-4-20250514'
+    model: 'claude-haiku-4-5-20251001'
   });
 });
 
@@ -501,7 +433,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /                  - Main page`);
   console.log(`   GET  /ai-strategy       - AI Builder page`);
   console.log(`   GET  /upload-strategy   - MQ Upload page`);
-  console.log(`   POST /api/generate-strategy - Generate AI strategy`);
+  console.log(`   POST /api/preview-strategy  - Preview (Haiku)`);
+  console.log(`   POST /api/generate-strategy - Generate (Haiku)`);
   console.log(`   GET  /health            - Health check`);
-  console.log(`🤖 Model: claude-sonnet-4-20250514`);
+  console.log(`🤖 Model: claude-haiku-4-5-20251001`);
 });
