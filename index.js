@@ -26,7 +26,7 @@ app.get('/ai-strategy', (req, res) => {
 // ============ AI 전략 생성 API ============
 app.post('/api/generate-strategy', async (req, res) => {
   try {
-    const { selected_indicators, strategy_description } = req.body;
+    const { selected_indicators, strategy_description, custom_name } = req.body;
     
     console.log('🤖 AI Strategy Generation Request');
     console.log('📊 Selected Indicators:', selected_indicators?.length || 0);
@@ -419,10 +419,12 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
       return res.status(401).json({ error: 'Authorization required' });
     }
 
-    // 전략 이름 생성 (선택된 지표들로)
-    const strategyName = selected_indicators.length > 0
-      ? `AI: ${selected_indicators.slice(0, 3).map(i => i.name).join(' + ')}`
-      : 'AI Strategy';
+// 전략 이름 생성 (사용자 입력 또는 자동 생성)
+const strategyName = custom_name || (
+  selected_indicators.length > 0
+    ? `AI: ${selected_indicators.slice(0, 3).map(i => i.name).join(' + ')}`
+    : 'AI Strategy'
+);
 
     console.log('📤 Saving to Workers API:', strategyName);
 
