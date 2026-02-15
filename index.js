@@ -455,6 +455,21 @@ const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
 
 console.log('✅ Strategy saved to database:', strategyId);
 
+    // 즐겨찾기 자동 추가
+try {
+  await fetch('https://cointop10-library.cointop10-com.workers.dev/api/favorites', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ settings_hash: `untested_${strategyId}` })
+  });
+  console.log('⭐ Auto-favorited');
+} catch (e) {
+  console.log('⚠️ Auto-favorite failed:', e.message);
+}
+
 res.json({
   success: true,
   strategy_id: strategyId,
