@@ -1,29 +1,15 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
+const { runCommunityBacktest } = require('./community-engine');
 
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(__dirname));
+app.use(express.json({ limit: '50mb' }));
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// ============ 페이지 라우트 ============
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/upload-strategy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'upload-strategy.html'));
-});
-
-app.get('/ai-strategy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'ai-strategy.html'));
-});
-
-// ============ 1단계: AI 전략 확인 (Haiku - 저비용) ============
+// ============ AI 전략 확인 (Haiku - 저비용) ============
 app.post('/api/preview-strategy', async (req, res) => {
   try {
     const { selected_indicators, strategy_description } = req.body;
@@ -97,12 +83,12 @@ Rules:
   }
 });
 
-// ============ 2단계: AI 전략 생성 API ============
+// ============ AI 전략 생성 (시그널 함수 전용) ============
 app.post('/api/generate-strategy', async (req, res) => {
   try {
     const { selected_indicators, strategy_description, custom_name } = req.body;
     
-    console.log('🤖 AI Strategy Generation Request');
+    console.log('🤖 AI Strategy Generation Request (Signal-Only Mode)');
     console.log('📊 Selected Indicators:', selected_indicators?.length || 0);
     console.log('📝 Description length:', strategy_description?.length || 0);
     
@@ -110,7 +96,6 @@ app.post('/api/generate-strategy', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // 지표 정보 포맷팅
     const indicatorsList = selected_indicators.map(ind => {
       const paramsStr = Object.entries(ind.params)
         .map(([k, v]) => `${k}: ${v}`)
@@ -118,7 +103,6 @@ app.post('/api/generate-strategy', async (req, res) => {
       return `- ${ind.name}${paramsStr ? ` (${paramsStr})` : ''}`;
     }).join('\n');
 
-    // Claude API 호출
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -128,10 +112,10 @@ app.post('/api/generate-strategy', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
+        max_tokens: 3000,
         messages: [{
           role: 'user',
-          content: `You are an expert crypto trading strategy developer. Generate a JavaScript trading strategy based on user's description.
+          content: `You are an expert crypto trading strategy developer. Generate a SIGNAL FUNCTION ONLY based on the user's description.
 
 **Selected Indicators (with default values):**
 ${indicatorsList}
@@ -139,177 +123,90 @@ ${indicatorsList}
 **User's Strategy Description:**
 "${strategy_description}"
 
-**CRITICAL INSTRUCTIONS:**
+**CRITICAL: You generate ONLY a signal function. NO position sizing, NO fee calculation, NO equity tracking, NO trade recording. Those are handled by a separate shared engine.**
 
-1. **Output Format** - Return ONLY valid JSON (no markdown, no code blocks):
+**Output Format** - Return ONLY valid JSON (no markdown, no code blocks):
 {
-  "js_code": "function runStrategy(candles, settings) { ... }",
+  "js_code": "function signal(candles, i, indicators, params, openPositions) { ... return { action: 'hold' }; }",
   "parameters": { ... }
 }
 
-2. **Function Signature:**
-\`\`\`javascript
-function runStrategy(candles, settings) {
-  // candles: [{timestamp, open, high, low, close, volume}]
-  // settings: all parameters + base settings (symbol, timeframe, market_type, initialBalance, leverage, equityPercent, etc)
+**Signal Function Signature:**
+function signal(candles, i, indicators, params, openPositions) {
+  // candles[i] = {timestamp, open, high, low, close, volume}
+  // i = current candle index
+  // indicators = pre-calculated indicator values (see below)
+  // params = user-adjustable strategy parameters
+  // openPositions = [{side, entry_price, coin_size, usdt_size, unrealizedPnl, duration}]
   
-  return {
-    trades: [...],
-    equity_curve: [...],
-    roi: number,
-    mdd: number,
-    win_rate: number,
-    total_trades: number,
-    final_balance: number,
-    // ... other stats
-  };
+  // MUST return one of:
+  // { action: 'entry_long', type: 'market' }
+  // { action: 'entry_long', type: 'stop', price: 65000 }
+  // { action: 'entry_long', type: 'limit', price: 64000 }
+  // { action: 'entry_short', type: 'market' }
+  // { action: 'entry_short', type: 'stop', price: 64000 }
+  // { action: 'entry_short', type: 'limit', price: 65000 }
+  // { action: 'exit' }           // close all positions
+  // { action: 'exit', index: 0 } // close specific position
+  // { action: 'cancel' }         // cancel all pending orders
+  // { action: 'hold' }           // do nothing
 }
-\`\`\`
 
-3. **Indicator Library Available:**
-These functions are already defined and can be used directly:
-- calculateRSI(prices, period)
-- calculateStochastic(highs, lows, closes, kPeriod, dPeriod)
-- calculateMACD(prices, fast, slow, signal)
-- calculateBB(prices, period, deviation)
-- calculateATR(highs, lows, closes, period)
-- calculateEMA(prices, period)
-- calculateSMA(prices, period)
-- calculateCCI(highs, lows, closes, period)
-- calculateMomentum(prices, period)
-- calculateWilliamsR(highs, lows, closes, period)
-- calculateADX(highs, lows, closes, period)
-- calculateSAR(highs, lows, closes, accel, max)
-- calculateIchimoku(highs, lows, tenkan, kijun, senkouB)
-- calculateOBV(closes, volumes)
-- calculateMFI(highs, lows, closes, volumes, period)
-- calculateAO(highs, lows)
-- calculateAlligator(highs, lows, closes)
-- calculateEnvelopes(prices, period, deviation)
-- calculateKeltner(highs, lows, closes, period, multiplier)
-- calculateDonchian(highs, lows, period)
-- calculateSuperTrend(highs, lows, closes, period, multiplier)
-- calculateAroon(highs, lows, period)
-- ... and more (see full list in backtest server)
+**Available Pre-Calculated Indicators (accessed by index i):**
+- indicators.ema[period][i] → EMA (periods: 5,8,10,12,20,21,26,50,100,200)
+- indicators.sma[period][i] → SMA (periods: 5,10,20,50,100,200)
+- indicators.rsi[period][i] → RSI (periods: 7,14,21)
+- indicators.stoch['14_3'].k[i], .d[i] → Stochastic (also '5_3', '21_7')
+- indicators.macd['12_26_9'].macd[i], .signal[i], .histogram[i]
+- indicators.bb['20_2'].upper[i], .middle[i], .lower[i]
+- indicators.atr[14][i] → ATR
+- indicators.cci[period][i] → CCI (14,20)
+- indicators.momentum[period][i] → Momentum (10,14)
+- indicators.williamsR[14][i]
+- indicators.adx[14].adx[i], .plusDI[i], .minusDI[i]
+- indicators.supertrend['10_3'].supertrend[i], .direction[i] (1=up, -1=down)
+- indicators.ao[i] → Awesome Oscillator
+- indicators.sar[i] → Parabolic SAR
+- indicators.obv[i] → On Balance Volume
+- indicators.mfi[14][i] → MFI
+- indicators.donchian[20].upper[i], .middle[i], .lower[i]
+- indicators.keltner['20_1.5'].upper[i], .middle[i], .lower[i]
+- indicators.envelopes['20_2.5'].upper[i], .middle[i], .lower[i]
+- indicators.aroon[25].up[i], .down[i]
+- indicators.ichimoku.tenkan[i], .kijun[i], .senkouA[i], .senkouB[i]
+- indicators.alligator.jaw[i], .teeth[i], .lips[i]
+- indicators._raw.closes, .highs, .lows, .volumes → raw arrays
+- indicators._calc.ema(prices, period) → custom period calculator
 
-4. **Position Sizing (MANDATORY):**
-\`\`\`javascript
-const equity = settings.equityPercent || 10;
-const lev = settings.market_type === 'futures' ? settings.leverage : 1;
-const rawUSDT = balance * (equity / 100) * lev;
-const positionUSDT = Math.floor(rawUSDT / 100) * 100;
-const positionSize = positionUSDT / entryPrice;
-\`\`\`
+**RULES:**
+1. Your function ONLY decides WHEN to buy/sell/exit. Nothing else.
+2. Use pre-calculated indicators - do NOT recalculate them.
+3. For custom periods: indicators._calc.ema(indicators._raw.closes, params.emaPeriod)
+4. Check null values: if (indicators.rsi[14][i] === null) return { action: 'hold' };
+5. openPositions.length > 0 means position is open
+6. type defaults to 'market' if omitted
 
-5. **Trade Tracking (MANDATORY):**
-\`\`\`javascript
-trades.push({
-  entry_time: candles[entryIdx].timestamp,
-  entry_price: entryPrice,
-  exit_time: candles[i].timestamp,
-  exit_price: exitPrice,
-  side: "LONG" | "SHORT",
-  pnl: profitLoss,
-  fee: totalFee,
-  size: positionSize,
-  duration: i - entryIdx,
-  order_type: "MARKET" | "BUY LIMIT" | "SELL STOP" | etc,
-  balance: balance
-});
-\`\`\`
-
-6. **Parameters Format (CRITICAL):**
-\`\`\`javascript
+**Parameters Format:**
 {
-  "rsiPeriod": {
-    "type": "number",
-    "default": 14,
-    "min": 2,
-    "max": 100,
-    "step": 1,
-    "label": "RSI Period",
-    "category": "strategy"
-  },
-  "takeProfitPercent": {
-    "type": "number",
-    "default": 5,
-    "min": 0.5,
-    "max": 50,
-    "step": 0.5,
-    "label": "Take Profit %",
-    "category": "strategy"
-  },
-  "stopLossPercent": {
-    "type": "number",
-    "default": 2,
-    "min": 0.5,
-    "max": 20,
-    "step": 0.5,
-    "label": "Stop Loss %",
-    "category": "strategy"
+  "paramName": {
+    "type": "number", "default": 14, "min": 2, "max": 100, "step": 1,
+    "label": "Parameter Label", "category": "strategy"
   }
 }
-\`\`\`
 
 **IMPORTANT:**
-- ALL parameters must be dynamically adjustable
-- Use \`category: "strategy"\` for all user-facing parameters
-- DO NOT include: leverage, equityPercent, feePercent (handled in base settings)
+- category must be "strategy" for all params
+- DO NOT include leverage/equityPercent/feePercent
+- If vague description: create sensible strategy using ALL selected indicators
+- BE CONCISE - signal function under 2000 tokens
+- Respond in SAME LANGUAGE as description for labels
 
-7. **Include Parameters for Selected Indicators:**
-${selected_indicators.map(ind => {
-  return `- ${ind.name}: Extract all parameters (periods, thresholds, etc.)`;
-}).join('\n')}
-
-8. **Stop if Bankrupt:**
-\`\`\`javascript
-if (balance <= 0) { break; }
-\`\`\`
-
-9. **Equity Curve Tracking:**
-\`\`\`javascript
-equityCurve.push({
-  timestamp: candles[i].timestamp,
-  balance: balance,
-  equity: balance + unrealizedPnL,
-  drawdown: (peak - equity) / peak * 100
-});
-\`\`\`
-
-10. **Return Object:**
-\`\`\`javascript
-return {
-  trades, equity_curve: equityCurve,
-  roi: ((finalBalance - initialBalance) / initialBalance * 100).toFixed(2),
-  mdd: maxDrawdown.toFixed(2),
-  win_rate: (winTrades / totalTrades * 100).toFixed(2),
-  total_trades: totalTrades, winning_trades: winTrades, losing_trades: loseTrades,
-  long_trades: longTrades, short_trades: shortTrades,
-  max_profit: maxProfit, max_loss: maxLoss,
-  avg_profit: avgProfit, avg_loss: avgLoss,
-  avg_duration: avgDuration, max_duration: maxDuration,
-  total_fee: totalFee,
-  final_balance: finalBalance.toFixed(2),
-  initial_balance: initialBalance, symbol: settings.symbol,
-  timeframe: settings.timeframe, market_type: settings.market_type
-};
-\`\`\`
-
-11. **BE CONCISE** - Keep code under 4000 tokens
-12. **Test Your Logic** - Ensure entry/exit signals make sense
-13. **If description is vague (e.g., "make a scalping strategy", "you decide"):**
-- Create a sensible strategy using ALL selected indicators
-- Use popular/proven parameter combinations
-- Default to scalping style: TP 2-5%, SL 1-3%
-- Combine indicators logically (trend filter + entry signal + confirmation)
-
-Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
+Return ONLY valid JSON.`
         }]
       })
     });
 
     console.log('🔵 Claude API Status:', response.status);
-    
     const data = await response.json();
     
     if (data.error) {
@@ -320,7 +217,6 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
     const responseText = data.content?.[0]?.text || '';
     console.log('🔵 Response length:', responseText.length);
 
-    // JSON 파싱
     let result;
     try {
       let cleanText = responseText
@@ -328,16 +224,14 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
         .replace(/```javascript\n?/g, '')
         .replace(/```\n?/g, '')
         .trim();
-      
       result = JSON.parse(cleanText);
     } catch (parseError) {
       console.log('⚠️ JSON parse failed, extracting code...');
-      
       const jsMatch = responseText.match(/```javascript\n([\s\S]*?)\n```/);
       if (jsMatch) {
         result = { js_code: jsMatch[1], parameters: {} };
       } else {
-        const functionMatch = responseText.match(/(function runStrategy[\s\S]*)/);
+        const functionMatch = responseText.match(/(function signal[\s\S]*)/);
         if (functionMatch) {
           result = { js_code: functionMatch[1], parameters: {} };
         } else {
@@ -346,11 +240,11 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
       }
     }
 
-    if (!result.js_code || !result.js_code.includes('function runStrategy')) {
-      throw new Error('Invalid strategy code: missing runStrategy function');
+    if (!result.js_code || !result.js_code.includes('function signal')) {
+      throw new Error('Invalid strategy code: missing signal function');
     }
 
-    console.log('✅ Strategy generated successfully');
+    console.log('✅ Signal function generated successfully');
     console.log('- Code length:', result.js_code?.length);
     console.log('- Parameters:', Object.keys(result.parameters || {}).length);
 
@@ -378,12 +272,12 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
         ea_name: strategyName,
         js_code: result.js_code,
         parameters: result.parameters || {},
-        source: 'ai_builder'
+        source: 'ai_builder',
+        engine_version: 'signal_v1',
       })
     });
 
     const uploadData = await uploadResponse.json();
-
     console.log('📥 Workers API Response:', JSON.stringify(uploadData));
 
     if (!uploadData.success) {
@@ -391,7 +285,6 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
     }
 
     const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
-
     console.log('✅ Strategy saved to database:', strategyId);
 
     // 즐겨찾기 자동 추가
@@ -424,24 +317,255 @@ Generate the strategy now. Return ONLY valid JSON with no markdown formatting.`
   }
 });
 
-// Health check
+// ============ MQ → 시그널 함수 변환 ============
+app.post('/api/convert-mq', async (req, res) => {
+  try {
+    const { mq_code, custom_name } = req.body;
+    
+    console.log('🔄 MQ Conversion Request (Signal-Only Mode)');
+    console.log('📝 MQ Code length:', mq_code?.length || 0);
+    
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    if (!mq_code || mq_code.length < 50) {
+      return res.status(400).json({ error: 'MQ code too short' });
+    }
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 3000,
+        messages: [{
+          role: 'user',
+          content: `You are an expert at converting MetaTrader 4/5 Expert Advisors to JavaScript signal functions.
+
+**MQ Source Code:**
+\`\`\`
+${mq_code.substring(0, 8000)}
+\`\`\`
+
+**CRITICAL: Convert ONLY the entry/exit LOGIC. NO position sizing, NO fees, NO equity tracking.**
+
+**Output Format** - Return ONLY valid JSON (no markdown):
+{
+  "js_code": "function signal(candles, i, indicators, params, openPositions) { ... }",
+  "parameters": { ... },
+  "ea_name": "extracted EA name"
+}
+
+**Signal Function returns one of:**
+{ action: 'entry_long', type: 'market'|'stop'|'limit', price: number }
+{ action: 'entry_short', type: 'market'|'stop'|'limit', price: number }
+{ action: 'exit' }  |  { action: 'exit', index: 0 }
+{ action: 'cancel' }  |  { action: 'hold' }
+
+**Indicator Mapping:**
+- iRSI → indicators.rsi[period][i]
+- iMA/iEMA → indicators.ema[period][i] or indicators.sma[period][i]
+- iStochastic → indicators.stoch['K_D'].k[i], .d[i]
+- iMACD → indicators.macd['12_26_9'].macd[i], .signal[i], .histogram[i]
+- iBands → indicators.bb['20_2'].upper[i], .middle[i], .lower[i]
+- iATR → indicators.atr[14][i]
+- iCCI → indicators.cci[period][i]
+- iADX → indicators.adx[14].adx[i], .plusDI[i], .minusDI[i]
+- iSAR → indicators.sar[i]
+- Custom periods: indicators._calc.ema(indicators._raw.closes, period)
+
+**Order Type Mapping:**
+- OP_BUY → { action: 'entry_long', type: 'market' }
+- OP_SELL → { action: 'entry_short', type: 'market' }
+- OP_BUYSTOP → { action: 'entry_long', type: 'stop', price: X }
+- OP_BUYLIMIT → { action: 'entry_long', type: 'limit', price: X }
+- OP_SELLSTOP → { action: 'entry_short', type: 'stop', price: X }
+- OP_SELLLIMIT → { action: 'entry_short', type: 'limit', price: X }
+- OrderClose → { action: 'exit' }
+- OrdersTotal() → openPositions.length
+
+**Rules:**
+1. Extract ONLY buy/sell conditions from OnTick()/start()
+2. TP/SL logic → include as exit conditions in signal function
+3. Check null: if (val === null) return { action: 'hold' };
+4. Parameters: { "type":"number", "default":14, "min":1, "max":200, "step":1, "label":"Name", "category":"strategy" }
+
+Return ONLY valid JSON.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.error) {
+      console.log('❌ MQ Convert API Error:', data.error);
+      return res.status(400).json({ error: data.error.message });
+    }
+
+    const responseText = data.content?.[0]?.text || '';
+    console.log('🔵 MQ Convert Response length:', responseText.length);
+
+    let result;
+    try {
+      let cleanText = responseText
+        .replace(/```json\n?/g, '')
+        .replace(/```javascript\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      result = JSON.parse(cleanText);
+    } catch (parseError) {
+      const functionMatch = responseText.match(/(function signal[\s\S]*)/);
+      if (functionMatch) {
+        result = { js_code: functionMatch[1], parameters: {}, ea_name: 'MQ Strategy' };
+      } else {
+        throw new Error('Could not extract valid code from MQ conversion');
+      }
+    }
+
+    if (!result.js_code || !result.js_code.includes('function signal')) {
+      throw new Error('Invalid conversion: missing signal function');
+    }
+
+    console.log('✅ MQ converted to signal function');
+
+    // Workers API에 저장
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authorization required' });
+    }
+
+    const strategyName = custom_name || result.ea_name || 'MQ Strategy';
+
+    const uploadResponse = await fetch('https://cointop10-api.cointop10-com.workers.dev/api/strategies', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        ea_name: strategyName,
+        js_code: result.js_code,
+        parameters: result.parameters || {},
+        source: 'mq_converter',
+        engine_version: 'signal_v1',
+      })
+    });
+
+    const uploadData = await uploadResponse.json();
+    if (!uploadData.success) {
+      throw new Error(uploadData.error || 'Failed to save strategy');
+    }
+
+    const strategyId = uploadData.ea_id || uploadData.id || uploadData.strategy_id;
+    console.log('✅ MQ Strategy saved:', strategyId);
+
+    // 즐겨찾기
+    try {
+      await fetch('https://cointop10-library.cointop10-com.workers.dev/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ settings_hash: `untested_${strategyId}` })
+      });
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      strategy_id: strategyId,
+      ea_name: strategyName
+    });
+
+  } catch (error) {
+    console.error('❌ MQ Convert Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ 커뮤니티 전략 백테스트 — 공용 엔진 ============
+app.post('/api/backtest', async (req, res) => {
+  try {
+    const { js_code, candles, settings = {} } = req.body;
+    
+    console.log('🔥 Community Backtest Request');
+    console.log('📊 Candles:', candles?.length || 0);
+    console.log('⚙️ Settings:', JSON.stringify({
+      symbol: settings.symbol,
+      timeframe: settings.timeframe,
+      market_type: settings.market_type,
+      leverage: settings.leverage,
+      equityPercent: settings.equityPercent,
+      maxConcurrentOrders: settings.maxConcurrentOrders,
+    }));
+
+    if (!js_code) {
+      return res.status(400).json({ error: 'No strategy code provided' });
+    }
+    if (!candles || candles.length < 300) {
+      return res.status(400).json({ error: 'Not enough candle data (min 300)' });
+    }
+
+    // 시그널 함수 생성
+    let signalFn;
+    try {
+      const wrappedCode = `
+        ${js_code}
+        return signal;
+      `;
+      signalFn = new Function(wrappedCode)();
+      
+      if (typeof signalFn !== 'function') {
+        throw new Error('signal is not a function');
+      }
+    } catch (e) {
+      console.log('❌ Signal function creation error:', e.message);
+      return res.status(400).json({ 
+        error: `Invalid signal function: ${e.message}`,
+        hint: 'Signal function must be: function signal(candles, i, indicators, params, openPositions) { ... }'
+      });
+    }
+
+    // 백테스트 실행
+    const startTime = Date.now();
+    const result = runCommunityBacktest(signalFn, candles, settings);
+    const elapsed = Date.now() - startTime;
+
+    console.log(`✅ Backtest complete in ${elapsed}ms`);
+    console.log(`   Trades: ${result.total_trades}, ROI: ${result.roi}%, MDD: ${result.mdd}%`);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ Backtest Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ Health check ============
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
-    service: 'ai-strategy-builder',
-    model: 'claude-haiku-4-5-20251001'
+    service: 'cointop10-api',
+    model: 'claude-haiku-4-5-20251001',
+    engine: 'community-engine-v1',
+    endpoints: [
+      'POST /api/preview-strategy',
+      'POST /api/generate-strategy',
+      'POST /api/convert-mq',
+      'POST /api/backtest',
+    ]
   });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 AI Strategy Builder running on port ${PORT}`);
-  console.log(`📊 Available endpoints:`);
-  console.log(`   GET  /                  - Main page`);
-  console.log(`   GET  /ai-strategy       - AI Builder page`);
-  console.log(`   GET  /upload-strategy   - MQ Upload page`);
-  console.log(`   POST /api/preview-strategy  - Preview (Haiku)`);
-  console.log(`   POST /api/generate-strategy - Generate (Haiku)`);
-  console.log(`   GET  /health            - Health check`);
-  console.log(`🤖 Model: claude-haiku-4-5-20251001`);
+  console.log(`🚀 CoinTop10 API running on port ${PORT}`);
+  console.log(`   POST /api/preview-strategy    - Preview (Haiku)`);
+  console.log(`   POST /api/generate-strategy   - AI → Signal Function`);
+  console.log(`   POST /api/convert-mq          - MQ → Signal Function`);
+  console.log(`   POST /api/backtest            - Community Backtest Engine`);
+  console.log(`   GET  /health                  - Health check`);
 });
