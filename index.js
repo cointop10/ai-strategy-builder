@@ -531,6 +531,7 @@ app.post('/api/backtest', async (req, res) => {
       leverage: settings.leverage,
       equityPercent: settings.equityPercent,
       maxConcurrentOrders: settings.maxConcurrentOrders,
+      params: settings.params,
     }));
 
     if (!js_code) {
