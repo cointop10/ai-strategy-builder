@@ -525,13 +525,13 @@ app.post('/api/backtest', async (req, res) => {
     console.log('🔥 Community Backtest Request');
     console.log('📊 Candles:', candles?.length || 0);
     console.log('⚙️ Settings:', JSON.stringify({
-      symbol: settings.symbol,
-      timeframe: settings.timeframe,
-      market_type: settings.market_type,
-      leverage: settings.leverage,
-      equityPercent: settings.equityPercent,
-      maxConcurrentOrders: settings.maxConcurrentOrders,
-      params: settings.params,
+      symbol: settings.symbol, timeframe: settings.timeframe, market_type: settings.market_type, 
+      leverage: settings.leverage, equityPercent: settings.equityPercent, 
+      maxConcurrentOrders: settings.maxConcurrentOrders, params: settings.params,
+      reverse: settings.masterReverse || settings.reverse,
+      compound: settings.compoundEnabled || settings.compound,
+      allowLong: settings.masterLongEnabled || settings.allowLong,
+      allowShort: settings.masterShortEnabled || settings.allowShort,
     }));
 
     if (!js_code) {
