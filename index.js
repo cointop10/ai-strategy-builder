@@ -175,7 +175,28 @@ function signal(candles, i, indicators, params, openPositions) {
 - indicators.aroon[25].up[i], .down[i]
 - indicators.ichimoku.tenkan[i], .kijun[i], .senkouA[i], .senkouB[i]
 - indicators.alligator.jaw[i], .teeth[i], .lips[i]
-- indicators._raw.closes, .highs, .lows, .volumes → raw arrays
+- indicators.demarker[14][i] → DeMarker (0-100)
+- indicators.rvi.rvi[i], .signal[i] → Relative Vigor Index
+- indicators.stddev[20][i] → Standard Deviation
+- indicators.kdj['9_3'].k[i], .d[i], .j[i] → KDJ
+- indicators.uo[i] → Ultimate Oscillator
+- indicators.trix[15][i] → TRIX
+- indicators.ad[i] → Accumulation/Distribution
+- indicators.cmf[20][i] → Chaikin Money Flow
+- indicators.eom[14][i] → Ease of Movement
+- indicators.vwap[i] → VWAP
+- indicators.bwmfi[i] → Bill Williams MFI
+- indicators.ac[i] → Accelerator Oscillator
+- indicators.fractals.up[i], .down[i] → Fractals (null or price)
+- indicators.gator.upper[i], .lower[i] → Gator Oscillator
+- indicators.pivot.pivot[i], .r1[i], .r2[i], .r3[i], .s1[i], .s2[i], .s3[i]
+- indicators.zigzag[5][i] → ZigZag (null or pivot price)
+- indicators.linreg[14].value[i], .slope[i] → Linear Regression
+- indicators.pricechannel[20].upper[i], .middle[i], .lower[i]
+- indicators.highlow[14].highest[i], .lowest[i], .middle[i]
+- indicators.hv[20][i] → Historical Volatility (annualized %)
+- indicators.vix[14][i] → Volatility Index (ATR/Price %)
+- indicators._raw.closes, .highs, .lows, .opens, .volumes → raw arrays
 - indicators._calc.ema(prices, period) → custom period calculator
 
 **RULES:**
@@ -377,6 +398,17 @@ ${mq_code.substring(0, 8000)}
 - iCCI → indicators.cci[period][i]
 - iADX → indicators.adx[14].adx[i], .plusDI[i], .minusDI[i]
 - iSAR → indicators.sar[i]
+- iDeMarker → indicators.demarker[14][i]
+- iRVI → indicators.rvi.rvi[i], .signal[i]
+- iStdDev → indicators.stddev[20][i]
+- iOBV → indicators.obv[i]
+- iMFI → indicators.mfi[14][i]
+- iAO → indicators.ao[i]
+- iAC → indicators.ac[i]
+- iAlligator → indicators.alligator.jaw[i], .teeth[i], .lips[i]
+- iFractals → indicators.fractals.up[i], .down[i]
+- iIchimoku → indicators.ichimoku.tenkan[i], .kijun[i], .senkouA[i], .senkouB[i]
+- VWAP → indicators.vwap[i]
 - Custom periods: indicators._calc.ema(indicators._raw.closes, period)
 
 **Order Type Mapping:**
