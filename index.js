@@ -465,10 +465,17 @@ Return ONLY valid JSON.`
 
     console.log('✅ MQ converted to signal function');
 
-    // Workers API에 저장
+    // Workers API에 저장 (토큰 있을 때만)
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
-      return res.status(401).json({ error: 'Authorization required' });
+      // 토큰 없으면 변환 결과만 리턴 (upload Workers가 직접 DB 저장)
+      console.log('✅ No token - returning conversion result only');
+      return res.json({
+        success: true,
+        js_code: result.js_code,
+        parameters: result.parameters || {},
+        ea_name: result.ea_name || 'MQ Strategy'
+      });
     }
 
     const strategyName = custom_name || result.ea_name || 'MQ Strategy';
