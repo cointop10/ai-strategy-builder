@@ -281,6 +281,11 @@ function runCommunityBacktest(signalFn, candles, settings) {
         console.log('🎯 First signal at i=' + i + ':', JSON.stringify(signal));
         firstSignalLogged = true;
       }
+      // 처음 3개 캔들의 RSI와 리턴값 로그
+      if (i >= startIndex && i < startIndex + 3) {
+        const rsi14 = indicators.rsi && indicators.rsi[14] ? indicators.rsi[14][i] : 'N/A';
+        console.log(`🔍 Debug i=${i}: RSI=${rsi14}, signal=${JSON.stringify(signal)}, close=${candles[i].close}`);
+      }
     } catch (e) {
       // 시그널 함수 에러 → hold (첫 3번만 로그)
       if (errorCount < 3) {
