@@ -219,6 +219,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
 
   // ========== 메인 백테스트 루프 ==========
   const startIndex = 200; // 보조지표 워밍업
+  let errorCount = 0;
+  let firstSignalLogged = false;
   
   for (let i = startIndex; i < candles.length; i++) {
     const candle = candles[i];
@@ -274,8 +276,17 @@ function runCommunityBacktest(signalFn, candles, settings) {
     let signal;
     try {
       signal = signalFn(candles, i, indicators, params, posSnapshot);
+      // 첫 non-hold 시그널 로그
+      if (signal && signal.action !== 'hold' && !firstSignalLogged) {
+        console.log('🎯 First signal at i=' + i + ':', JSON.stringify(signal));
+        firstSignalLogged = true;
+      }
     } catch (e) {
-      // 시그널 함수 에러 → hold
+      // 시그널 함수 에러 → hold (첫 3번만 로그)
+      if (errorCount < 3) {
+        console.error('⚠️ Signal error at i=' + i + ':', e.message);
+        errorCount++;
+      }
       signal = { action: 'hold' };
     }
     
