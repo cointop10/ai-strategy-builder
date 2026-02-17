@@ -544,17 +544,28 @@ app.post('/api/backtest', async (req, res) => {
     // 시그널 함수 생성
     let signalFn;
     try {
+      // js_code가 "function signal(...)" 형태인지 확인
+      // 다른 이름이면 signal로 변환
+      let code = js_code.trim();
+      
+      // "function XXX(" → "function signal(" 로 통일
+      if (code.startsWith('function ') && !code.startsWith('function signal')) {
+        code = code.replace(/^function\s+\w+\s*\(/, 'function signal(');
+        console.log('⚠️ Renamed function to signal');
+      }
+      
       const wrappedCode = `
-        ${js_code}
-        return signal;
+        ${code}
+        return typeof signal === 'function' ? signal : null;
       `;
       signalFn = new Function(wrappedCode)();
       
       if (typeof signalFn !== 'function') {
-        throw new Error('signal is not a function');
+        throw new Error('signal is not defined');
       }
     } catch (e) {
       console.log('❌ Signal function creation error:', e.message);
+      console.log('❌ Code preview:', js_code.substring(0, 200));
       return res.status(400).json({ 
         error: `Invalid signal function: ${e.message}`,
         hint: 'Signal function must be: function signal(candles, i, indicators, params, openPositions) { ... }'
