@@ -260,7 +260,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
     // 3) 시그널 함수 호출
     // openPositions의 읽기 전용 복사본 전달
     const posSnapshot = openPositions.map(p => ({
-      side: p.side,
+      side: p.side.toLowerCase(),       // 'long' or 'short' (소문자 — AI 코드 호환)
+      SIDE: p.side,                     // 'LONG' or 'SHORT' (대문자 — 혹시 모를 호환)
       entry_price: p.entry_price,
       coin_size: p.coin_size,
       usdt_size: p.usdt_size,
