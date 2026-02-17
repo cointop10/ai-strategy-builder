@@ -221,6 +221,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
   const startIndex = 200; // 보조지표 워밍업
   let errorCount = 0;
   let firstSignalLogged = false;
+  let debugCounts = { total: 0, earlyReturn: 0, nullRsi: 0, hasPosition: 0, bullish: 0, bearish: 0 };
   
   for (let i = startIndex; i < candles.length; i++) {
     const candle = candles[i];
@@ -285,6 +286,11 @@ function runCommunityBacktest(signalFn, candles, settings) {
       if (i >= startIndex && i < startIndex + 3) {
         const rsi14 = indicators.rsi && indicators.rsi[14] ? indicators.rsi[14][i] : 'N/A';
         console.log(`🔍 Debug i=${i}: RSI=${rsi14}, signal=${JSON.stringify(signal)}, close=${candles[i].close}`);
+      }
+      // 시그널 카운트
+      debugCounts.total++;
+      if (signal && signal.action !== 'hold') {
+        debugCounts[signal.action] = (debugCounts[signal.action] || 0) + 1;
       }
     } catch (e) {
       // 시그널 함수 에러 → hold (첫 3번만 로그)
@@ -387,6 +393,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
   }
   
   // ========== 마지막: 열린 포지션 정리 (선택) ==========
+  console.log('📊 Signal counts:', JSON.stringify(debugCounts));
   if (openPositions.length > 0 && candles.length > 0) {
     const lastCandle = candles[candles.length - 1];
     closeAllPositions(lastCandle.close, candles.length - 1);
