@@ -525,6 +525,346 @@ function calculateAlligator(highs, lows, closes) {
 }
 
 // ============================================================
+// 추가 보조지표 21개
+// ============================================================
+
+// DeMarker
+function calculateDeMarker(highs, lows, period = 14) {
+  const len = highs.length;
+  const result = new Array(len).fill(null);
+  for (let i = period; i < len; i++) {
+    let deMax = 0, deMin = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      deMax += highs[j] > highs[j - 1] ? highs[j] - highs[j - 1] : 0;
+      deMin += lows[j] < lows[j - 1] ? lows[j - 1] - lows[j] : 0;
+    }
+    result[i] = (deMax + deMin) === 0 ? 50 : (deMax / (deMax + deMin)) * 100;
+  }
+  return result;
+}
+
+// RVI (Relative Vigor Index)
+function calculateRVI(opens, highs, lows, closes, period = 10) {
+  const len = closes.length;
+  const rviLine = new Array(len).fill(null);
+  const signalLine = new Array(len).fill(null);
+  for (let i = period + 3; i < len; i++) {
+    let numSum = 0, denSum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const num = ((closes[j] - opens[j]) + 2 * (closes[j-1] - opens[j-1]) + 2 * (closes[j-2] - opens[j-2]) + (closes[j-3] - opens[j-3])) / 6;
+      const den = ((highs[j] - lows[j]) + 2 * (highs[j-1] - lows[j-1]) + 2 * (highs[j-2] - lows[j-2]) + (highs[j-3] - lows[j-3])) / 6;
+      numSum += num;
+      denSum += den;
+    }
+    rviLine[i] = denSum === 0 ? 0 : numSum / denSum;
+  }
+  for (let i = 3; i < len; i++) {
+    if (rviLine[i] !== null && rviLine[i-1] !== null && rviLine[i-2] !== null && rviLine[i-3] !== null) {
+      signalLine[i] = (rviLine[i] + 2 * rviLine[i-1] + 2 * rviLine[i-2] + rviLine[i-3]) / 6;
+    }
+  }
+  return { rvi: rviLine, signal: signalLine };
+}
+
+// Standard Deviation
+function calculateStdDev(prices, period = 20) {
+  const len = prices.length;
+  const result = new Array(len).fill(null);
+  for (let i = period - 1; i < len; i++) {
+    const slice = prices.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / period;
+    const variance = slice.reduce((sum, p) => sum + (p - mean) ** 2, 0) / period;
+    result[i] = Math.sqrt(variance);
+  }
+  return result;
+}
+
+// A/D (Accumulation/Distribution)
+function calculateAD(highs, lows, closes, volumes) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  let ad = 0;
+  for (let i = 0; i < len; i++) {
+    const range = highs[i] - lows[i];
+    const clv = range === 0 ? 0 : ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range;
+    ad += clv * volumes[i];
+    result[i] = ad;
+  }
+  return result;
+}
+
+// Accelerator Oscillator (AC)
+function calculateAC(highs, lows) {
+  const ao = calculateAO(highs, lows);
+  const len = ao.length;
+  const result = new Array(len).fill(null);
+  for (let i = 4; i < len; i++) {
+    if (ao[i] === null) continue;
+    let sum = 0, count = 0;
+    for (let j = i - 4; j <= i; j++) {
+      if (ao[j] !== null) { sum += ao[j]; count++; }
+    }
+    if (count === 5) result[i] = ao[i] - sum / 5;
+  }
+  return result;
+}
+
+// Fractals
+function calculateFractals(highs, lows) {
+  const len = highs.length;
+  const up = new Array(len).fill(null);
+  const down = new Array(len).fill(null);
+  for (let i = 2; i < len - 2; i++) {
+    if (highs[i] > highs[i-2] && highs[i] > highs[i-1] && highs[i] > highs[i+1] && highs[i] > highs[i+2]) {
+      up[i] = highs[i];
+    }
+    if (lows[i] < lows[i-2] && lows[i] < lows[i-1] && lows[i] < lows[i+1] && lows[i] < lows[i+2]) {
+      down[i] = lows[i];
+    }
+  }
+  return { up, down };
+}
+
+// Gator Oscillator
+function calculateGator(highs, lows, closes) {
+  const alligator = calculateAlligator(highs, lows, closes);
+  const len = closes.length;
+  const upper = new Array(len).fill(null);
+  const lower = new Array(len).fill(null);
+  for (let i = 0; i < len; i++) {
+    if (alligator.jaw[i] !== null && alligator.teeth[i] !== null) {
+      upper[i] = Math.abs(alligator.jaw[i] - alligator.teeth[i]);
+    }
+    if (alligator.teeth[i] !== null && alligator.lips[i] !== null) {
+      lower[i] = -Math.abs(alligator.teeth[i] - alligator.lips[i]);
+    }
+  }
+  return { upper, lower };
+}
+
+// BW MFI (Bill Williams Market Facilitation Index)
+function calculateBWMFI(highs, lows, volumes) {
+  const len = highs.length;
+  const result = new Array(len).fill(null);
+  for (let i = 0; i < len; i++) {
+    const range = highs[i] - lows[i];
+    result[i] = volumes[i] === 0 ? 0 : range / volumes[i] * 100000;
+  }
+  return result;
+}
+
+// VWAP
+function calculateVWAP(highs, lows, closes, volumes) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  let cumPV = 0, cumV = 0;
+  for (let i = 0; i < len; i++) {
+    const tp = (highs[i] + lows[i] + closes[i]) / 3;
+    cumPV += tp * volumes[i];
+    cumV += volumes[i];
+    result[i] = cumV === 0 ? closes[i] : cumPV / cumV;
+  }
+  return result;
+}
+
+// Pivot Points
+function calculatePivot(highs, lows, closes) {
+  const len = closes.length;
+  const pivot = new Array(len).fill(null);
+  const r1 = new Array(len).fill(null), r2 = new Array(len).fill(null), r3 = new Array(len).fill(null);
+  const s1 = new Array(len).fill(null), s2 = new Array(len).fill(null), s3 = new Array(len).fill(null);
+  for (let i = 1; i < len; i++) {
+    const h = highs[i-1], l = lows[i-1], c = closes[i-1];
+    const pp = (h + l + c) / 3;
+    pivot[i] = pp;
+    r1[i] = 2 * pp - l; r2[i] = pp + (h - l); r3[i] = h + 2 * (pp - l);
+    s1[i] = 2 * pp - h; s2[i] = pp - (h - l); s3[i] = l - 2 * (h - pp);
+  }
+  return { pivot, r1, r2, r3, s1, s2, s3 };
+}
+
+// ZigZag
+function calculateZigZag(highs, lows, closes, deviation = 5) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  const devPercent = deviation / 100;
+  let lastPivotPrice = closes[0], lastDirection = 0;
+  for (let i = 1; i < len; i++) {
+    if (lastDirection >= 0 && highs[i] >= lastPivotPrice * (1 + devPercent)) {
+      lastPivotPrice = highs[i]; lastDirection = 1; result[i] = highs[i];
+    } else if (lastDirection <= 0 && lows[i] <= lastPivotPrice * (1 - devPercent)) {
+      lastPivotPrice = lows[i]; lastDirection = -1; result[i] = lows[i];
+    } else if (lastDirection === 1 && lows[i] <= lastPivotPrice * (1 - devPercent)) {
+      lastPivotPrice = lows[i]; lastDirection = -1; result[i] = lows[i];
+    } else if (lastDirection === -1 && highs[i] >= lastPivotPrice * (1 + devPercent)) {
+      lastPivotPrice = highs[i]; lastDirection = 1; result[i] = highs[i];
+    }
+  }
+  return result;
+}
+
+// Linear Regression
+function calculateLinReg(prices, period = 14) {
+  const len = prices.length;
+  const value = new Array(len).fill(null);
+  const slope = new Array(len).fill(null);
+  for (let i = period - 1; i < len; i++) {
+    const slice = prices.slice(i - period + 1, i + 1);
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    for (let j = 0; j < period; j++) {
+      sumX += j; sumY += slice[j]; sumXY += j * slice[j]; sumX2 += j * j;
+    }
+    const s = (period * sumXY - sumX * sumY) / (period * sumX2 - sumX * sumX);
+    const b = (sumY - s * sumX) / period;
+    slope[i] = s;
+    value[i] = b + s * (period - 1);
+  }
+  return { value, slope };
+}
+
+// KDJ
+function calculateKDJ(highs, lows, closes, kPeriod = 9, dPeriod = 3) {
+  const len = closes.length;
+  const k = new Array(len).fill(null), d = new Array(len).fill(null), j = new Array(len).fill(null);
+  for (let i = kPeriod - 1; i < len; i++) {
+    const highest = Math.max(...highs.slice(i - kPeriod + 1, i + 1));
+    const lowest = Math.min(...lows.slice(i - kPeriod + 1, i + 1));
+    const rsv = highest === lowest ? 50 : ((closes[i] - lowest) / (highest - lowest)) * 100;
+    k[i] = i === kPeriod - 1 ? rsv : (2 / 3) * (k[i-1] || 50) + (1 / 3) * rsv;
+  }
+  for (let i = 0; i < len; i++) {
+    if (k[i] === null) continue;
+    d[i] = d[i-1] === null || d[i-1] === undefined ? k[i] : (2 / 3) * d[i-1] + (1 / 3) * k[i];
+    j[i] = 3 * k[i] - 2 * d[i];
+  }
+  return { k, d, j };
+}
+
+// Ultimate Oscillator
+function calculateUO(highs, lows, closes, p1 = 7, p2 = 14, p3 = 28) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  for (let i = p3; i < len; i++) {
+    let bp1 = 0, tr1 = 0, bp2 = 0, tr2 = 0, bp3 = 0, tr3 = 0;
+    for (let j = i - p3 + 1; j <= i; j++) {
+      const bp = closes[j] - Math.min(lows[j], closes[j - 1]);
+      const tr = Math.max(highs[j], closes[j - 1]) - Math.min(lows[j], closes[j - 1]);
+      if (j > i - p1) { bp1 += bp; tr1 += tr; }
+      if (j > i - p2) { bp2 += bp; tr2 += tr; }
+      bp3 += bp; tr3 += tr;
+    }
+    const a1 = tr1 === 0 ? 0 : bp1 / tr1;
+    const a2 = tr2 === 0 ? 0 : bp2 / tr2;
+    const a3 = tr3 === 0 ? 0 : bp3 / tr3;
+    result[i] = ((a1 * 4 + a2 * 2 + a3) / 7) * 100;
+  }
+  return result;
+}
+
+// TRIX
+function calculateTRIX(prices, period = 15) {
+  const len = prices.length;
+  const ema1 = calculateEMA(prices, period);
+  const ema2 = calculateEMA(ema1.map(v => v === null ? prices[0] : v), period);
+  const ema3 = calculateEMA(ema2.map(v => v === null ? prices[0] : v), period);
+  const result = new Array(len).fill(null);
+  for (let i = 1; i < len; i++) {
+    if (ema3[i] !== null && ema3[i-1] !== null && ema3[i-1] !== 0) {
+      result[i] = ((ema3[i] - ema3[i-1]) / ema3[i-1]) * 10000;
+    }
+  }
+  return result;
+}
+
+// CMF (Chaikin Money Flow)
+function calculateCMF(highs, lows, closes, volumes, period = 20) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  for (let i = period - 1; i < len; i++) {
+    let mfvSum = 0, volSum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const range = highs[j] - lows[j];
+      const clv = range === 0 ? 0 : ((closes[j] - lows[j]) - (highs[j] - closes[j])) / range;
+      mfvSum += clv * volumes[j];
+      volSum += volumes[j];
+    }
+    result[i] = volSum === 0 ? 0 : mfvSum / volSum;
+  }
+  return result;
+}
+
+// EOM (Ease of Movement)
+function calculateEOM(highs, lows, volumes, period = 14) {
+  const len = highs.length;
+  const result = new Array(len).fill(null);
+  const raw = new Array(len).fill(null);
+  for (let i = 1; i < len; i++) {
+    const dm = ((highs[i] + lows[i]) / 2) - ((highs[i-1] + lows[i-1]) / 2);
+    const range = highs[i] - lows[i];
+    const boxRatio = range === 0 ? 0 : (volumes[i] / 10000) / range;
+    raw[i] = boxRatio === 0 ? 0 : dm / boxRatio;
+  }
+  for (let i = period; i < len; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += raw[j] || 0;
+    result[i] = sum / period;
+  }
+  return result;
+}
+
+// Historical Volatility
+function calculateHV(closes, period = 20) {
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  for (let i = period; i < len; i++) {
+    const returns = [];
+    for (let j = i - period + 1; j <= i; j++) {
+      if (closes[j-1] > 0) returns.push(Math.log(closes[j] / closes[j-1]));
+    }
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / returns.length;
+    result[i] = Math.sqrt(variance * 365) * 100;
+  }
+  return result;
+}
+
+// Volatility Index (ATR-based)
+function calculateVolatilityIndex(highs, lows, closes, period = 14) {
+  const atr = calculateATR(highs, lows, closes, period);
+  const len = closes.length;
+  const result = new Array(len).fill(null);
+  for (let i = 0; i < len; i++) {
+    if (atr[i] !== null && closes[i] > 0) result[i] = (atr[i] / closes[i]) * 100;
+  }
+  return result;
+}
+
+// Price Channel
+function calculatePriceChannel(highs, lows, period = 20) {
+  const len = highs.length;
+  const upper = new Array(len).fill(null), lower = new Array(len).fill(null), middle = new Array(len).fill(null);
+  for (let i = period; i < len; i++) {
+    const h = Math.max(...highs.slice(i - period, i));
+    const l = Math.min(...lows.slice(i - period, i));
+    upper[i] = h; lower[i] = l; middle[i] = (h + l) / 2;
+  }
+  return { upper, middle, lower };
+}
+
+// High/Low
+function calculateHighLow(highs, lows, period = 14) {
+  const len = highs.length;
+  const highest = new Array(len).fill(null), lowest = new Array(len).fill(null), middle = new Array(len).fill(null);
+  for (let i = period - 1; i < len; i++) {
+    const h = Math.max(...highs.slice(i - period + 1, i + 1));
+    const l = Math.min(...lows.slice(i - period + 1, i + 1));
+    highest[i] = h; lowest[i] = l; middle[i] = (h + l) / 2;
+  }
+  return { highest, lowest, middle };
+}
+
+
+// ============================================================
 // Pre-calculate all indicators for a candle set
 // Returns object accessible by signal function
 // ============================================================
@@ -532,6 +872,7 @@ function preCalculateIndicators(candles, params = {}) {
   const closes = candles.map(c => c.close);
   const highs = candles.map(c => c.high);
   const lows = candles.map(c => c.low);
+  const opens = candles.map(c => c.open);
   const volumes = candles.map(c => c.volume || 0);
   
   return {
@@ -621,6 +962,63 @@ function preCalculateIndicators(candles, params = {}) {
       14: calculateMFI(highs, lows, closes, volumes, 14),
     },
     
+    // ===== 추가 보조지표 21개 =====
+    
+    // Oscillators
+    demarker: {
+      14: calculateDeMarker(highs, lows, 14),
+    },
+    rvi: calculateRVI(opens, highs, lows, closes, 10),
+    stddev: {
+      20: calculateStdDev(closes, 20),
+    },
+    kdj: {
+      '9_3': calculateKDJ(highs, lows, closes, 9, 3),
+    },
+    uo: calculateUO(highs, lows, closes, 7, 14, 28),
+    trix: {
+      15: calculateTRIX(closes, 15),
+    },
+    
+    // Volume
+    ad: calculateAD(highs, lows, closes, volumes),
+    cmf: {
+      20: calculateCMF(highs, lows, closes, volumes, 20),
+    },
+    eom: {
+      14: calculateEOM(highs, lows, volumes, 14),
+    },
+    vwap: calculateVWAP(highs, lows, closes, volumes),
+    bwmfi: calculateBWMFI(highs, lows, volumes),
+    
+    // Bill Williams
+    ac: calculateAC(highs, lows),
+    fractals: calculateFractals(highs, lows),
+    gator: calculateGator(highs, lows, closes),
+    
+    // Trend/Channel
+    pivot: calculatePivot(highs, lows, closes),
+    zigzag: {
+      5: calculateZigZag(highs, lows, closes, 5),
+    },
+    linreg: {
+      14: calculateLinReg(closes, 14),
+    },
+    pricechannel: {
+      20: calculatePriceChannel(highs, lows, 20),
+    },
+    highlow: {
+      14: calculateHighLow(highs, lows, 14),
+    },
+    
+    // Volatility
+    hv: {
+      20: calculateHV(closes, 20),
+    },
+    vix: {
+      14: calculateVolatilityIndex(highs, lows, closes, 14),
+    },
+    
     // Raw individual calculator functions (for custom periods in params)
     _calc: {
       ema: calculateEMA,
@@ -645,20 +1043,51 @@ function preCalculateIndicators(candles, params = {}) {
       sar: calculateSAR,
       ichimoku: calculateIchimoku,
       alligator: calculateAlligator,
+      // 추가 21개
+      demarker: calculateDeMarker,
+      rvi: calculateRVI,
+      stddev: calculateStdDev,
+      ad: calculateAD,
+      ac: calculateAC,
+      fractals: calculateFractals,
+      gator: calculateGator,
+      bwmfi: calculateBWMFI,
+      vwap: calculateVWAP,
+      pivot: calculatePivot,
+      zigzag: calculateZigZag,
+      linreg: calculateLinReg,
+      kdj: calculateKDJ,
+      uo: calculateUO,
+      trix: calculateTRIX,
+      cmf: calculateCMF,
+      eom: calculateEOM,
+      hv: calculateHV,
+      volatilityIndex: calculateVolatilityIndex,
+      pricechannel: calculatePriceChannel,
+      highlow: calculateHighLow,
     },
     
     // Raw price arrays for custom calculations
-    _raw: { closes, highs, lows, volumes }
+    _raw: { closes, highs, lows, opens, volumes }
   };
 }
 
 module.exports = {
   preCalculateIndicators,
+  // 기존 22개
   calculateEMA, calculateSMA, calculateRSI, calculateStochastic,
   calculateMACD, calculateBB, calculateATR, calculateCCI,
   calculateMomentum, calculateWilliamsR, calculateADX,
   calculateSuperTrend, calculateOBV, calculateMFI,
   calculateDonchian, calculateAO, calculateEnvelopes,
   calculateKeltner, calculateAroon, calculateSAR,
-  calculateIchimoku, calculateAlligator
+  calculateIchimoku, calculateAlligator,
+  // 추가 21개
+  calculateDeMarker, calculateRVI, calculateStdDev,
+  calculateAD, calculateAC, calculateFractals,
+  calculateGator, calculateBWMFI, calculateVWAP,
+  calculatePivot, calculateZigZag, calculateLinReg,
+  calculateKDJ, calculateUO, calculateTRIX,
+  calculateCMF, calculateEOM, calculateHV,
+  calculateVolatilityIndex, calculatePriceChannel, calculateHighLow
 };
