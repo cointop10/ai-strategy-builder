@@ -28,15 +28,26 @@ function runCommunityBacktest(signalFn, candles, settings) {
     feePercent = null,         // null이면 기본값 사용
     maxPositionUSDT = 10000000,
     maxConcurrentOrders = 1,
-    compound = true,
-    reverse = false,
-    allowLong = true,
-    allowShort = true,
+    // backtest.html 이름 호환: compoundEnabled → compound, masterReverse → reverse
+    compound: _compound,
+    compoundEnabled: _compoundEnabled,
+    reverse: _reverse,
+    masterReverse: _masterReverse,
+    allowLong: _allowLong,
+    masterLongEnabled: _masterLongEnabled,
+    allowShort: _allowShort,
+    masterShortEnabled: _masterShortEnabled,
     symbol = 'BTCUSDT',
     timeframe = '1h',
     volumeFilter = 0,
     params = {},               // 전략 파라미터
   } = settings;
+
+  // 이름 호환 처리
+  const compound = _compound !== undefined ? _compound : (_compoundEnabled !== undefined ? _compoundEnabled : true);
+  const reverse = _reverse !== undefined ? _reverse : (_masterReverse !== undefined ? _masterReverse : false);
+  const allowLong = _allowLong !== undefined ? _allowLong : (_masterLongEnabled !== undefined ? _masterLongEnabled : true);
+  const allowShort = _allowShort !== undefined ? _allowShort : (_masterShortEnabled !== undefined ? _masterShortEnabled : true);
 
   // 수수료 기본값: futures 0.05%, spot 0.1%
   const fee = feePercent !== null ? feePercent / 100 : (market_type === 'futures' ? 0.0005 : 0.001);
@@ -103,6 +114,10 @@ function runCommunityBacktest(signalFn, candles, settings) {
     balance -= entryFee;
     totalFees += entryFee;
     
+    // 주문유형: BUY MARKET, SELL STOP, BUY LIMIT 등
+    const sidePrefix = actualSide === 'LONG' ? 'BUY' : 'SELL';
+    const fullOrderType = orderType === 'MARKET' ? `${sidePrefix} MARKET` : orderType;
+    
     const pos = {
       id: trades.length + openPositions.length,
       side: actualSide,
@@ -111,7 +126,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
       entry_index: candleIndex,
       coin_size: size.coins,
       usdt_size: size.usdt,
-      order_type: orderType,
+      order_type: fullOrderType,
     };
     
     openPositions.push(pos);
