@@ -112,7 +112,7 @@ app.post('/api/generate-strategy', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 3000,
+        max_tokens: 6000,
         messages: [{
           role: 'user',
           content: `You are an expert crypto trading strategy developer. Generate a SIGNAL FUNCTION ONLY based on the user's description.
@@ -363,7 +363,7 @@ app.post('/api/convert-mq', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 3000,
+        max_tokens: 6000,
         messages: [{
           role: 'user',
           content: `You are an expert at converting MetaTrader 4/5 Expert Advisors to JavaScript signal functions.
