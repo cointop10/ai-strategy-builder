@@ -112,7 +112,7 @@ app.post('/api/generate-strategy', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 6000,
+        max_tokens: 3000,
         messages: [{
           role: 'user',
           content: `You are an expert crypto trading strategy developer. Generate a SIGNAL FUNCTION ONLY based on the user's description.
@@ -363,14 +363,14 @@ app.post('/api/convert-mq', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 6000,
+        max_tokens: 3000,
         messages: [{
           role: 'user',
           content: `You are an expert at converting MetaTrader 4/5 Expert Advisors to JavaScript signal functions.
 
 **MQ Source Code:**
 \`\`\`
-${mq_code.substring(0, 50000)}
+${mq_code.substring(0, 8000)}
 \`\`\`
 
 **CRITICAL: Convert ONLY the entry/exit LOGIC. NO position sizing, NO fees, NO equity tracking.**
@@ -559,6 +559,22 @@ app.post('/api/backtest', async (req, res) => {
       if (code.startsWith('function ') && !code.startsWith('function signal')) {
         code = code.replace(/^function\s+\w+\s*\(/, 'function signal(');
         console.log('⚠️ Renamed function to signal');
+      }
+      
+      // signal 함수 밖 코드 제거 (Haiku가 헬퍼를 밖에 넣는 경우 방지)
+      const funcStart = code.indexOf('function signal');
+      if (funcStart >= 0) {
+        let braceCount = 0;
+        let funcEnd = -1;
+        for (let ci = code.indexOf('{', funcStart); ci < code.length; ci++) {
+          if (code[ci] === '{') braceCount++;
+          if (code[ci] === '}') braceCount--;
+          if (braceCount === 0) { funcEnd = ci + 1; break; }
+        }
+        if (funcEnd > 0 && funcEnd < code.length) {
+          console.log('⚠️ Stripped', code.length - funcEnd, 'chars outside signal function');
+          code = code.substring(0, funcEnd);
+        }
       }
       
       const wrappedCode = `
