@@ -868,6 +868,24 @@ function calculateHighLow(highs, lows, period = 14) {
 // Pre-calculate all indicators for a candle set
 // Returns object accessible by signal function
 // ============================================================
+function calculateHeikinAshi(candles) {
+  const ha = [];
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    const haClose = (c.open + c.high + c.low + c.close) / 4;
+    let haOpen;
+    if (i === 0) {
+      haOpen = (c.open + c.close) / 2;
+    } else {
+      haOpen = (ha[i - 1].open + ha[i - 1].close) / 2;
+    }
+    const haHigh = Math.max(c.high, haOpen, haClose);
+    const haLow = Math.min(c.low, haOpen, haClose);
+    ha.push({ open: haOpen, close: haClose, high: haHigh, low: haLow });
+  }
+  return ha;
+}
+
 function preCalculateIndicators(candles, params = {}) {
   const closes = candles.map(c => c.close);
   const highs = candles.map(c => c.high);
@@ -1065,6 +1083,7 @@ function preCalculateIndicators(candles, params = {}) {
       volatilityIndex: calculateVolatilityIndex,
       pricechannel: calculatePriceChannel,
       highlow: calculateHighLow,
+      heikinAshi: calculateHeikinAshi,
     },
     
     // Raw price arrays for custom calculations
@@ -1089,5 +1108,5 @@ module.exports = {
   calculatePivot, calculateZigZag, calculateLinReg,
   calculateKDJ, calculateUO, calculateTRIX,
   calculateCMF, calculateEOM, calculateHV,
-  calculateVolatilityIndex, calculatePriceChannel, calculateHighLow
+  calculateVolatilityIndex, calculatePriceChannel, calculateHighLow, calculateHeikinAshi
 };
