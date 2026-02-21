@@ -539,6 +539,9 @@ app.post('/api/backtest', async (req, res) => {
       compound: settings.compoundEnabled || settings.compound,
       allowLong: settings.masterLongEnabled || settings.allowLong,
       allowShort: settings.masterShortEnabled || settings.allowShort,
+      advancedTP: settings.advancedTPEnabled ? settings.advancedTP + '%' : 'OFF',
+      advancedSL: settings.advancedSLEnabled ? settings.advancedSL + '%' : 'OFF',
+      advancedMaxDuration: settings.advancedMaxDurationEnabled ? settings.advancedMaxDuration + ' candles' : 'OFF',
     }));
 
     if (!js_code) {
