@@ -370,7 +370,7 @@ app.post('/api/convert-mq', async (req, res) => {
 
 **MQ Source Code:**
 \`\`\`
-${mq_code.substring(0, 8000)}
+${mq_code.substring(0, 50000)}
 \`\`\`
 
 **CRITICAL: Convert ONLY the entry/exit LOGIC. NO position sizing, NO fees, NO equity tracking.**
