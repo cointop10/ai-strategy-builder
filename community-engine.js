@@ -41,6 +41,13 @@ function runCommunityBacktest(signalFn, candles, settings) {
     timeframe = '1h',
     volumeFilter = 0,
     params = {},               // 전략 파라미터
+    // 어드밴스 설정: 포지션 강제 청산 (기본 OFF)
+    advancedTPEnabled = false,
+    advancedTP = 5,            // 최대 이익 % (진입가 대비)
+    advancedSLEnabled = false,
+    advancedSL = 3,            // 최대 손실 % (진입가 대비)
+    advancedMaxDurationEnabled = false,
+    advancedMaxDuration = 10,  // 최대 보유기간 (캔들 수)
   } = settings;
 
   // 이름 호환 처리
@@ -275,7 +282,32 @@ function runCommunityBacktest(signalFn, candles, settings) {
       break; // 파산 → 종료
     }
     
-    // 3) 시그널 함수 호출
+    // 3) 어드밴스 설정: TP/SL/Duration 강제 청산
+    for (let p = openPositions.length - 1; p >= 0; p--) {
+      const pos = openPositions[p];
+      const priceChange = pos.side === 'LONG'
+        ? (candle.close - pos.entry_price) / pos.entry_price * 100
+        : (pos.entry_price - candle.close) / pos.entry_price * 100;
+      const holdDuration = i - pos.entry_index;
+      
+      // 최대 이익 도달 → 강제 익절
+      if (advancedTPEnabled && priceChange >= advancedTP) {
+        closePosition(p, candle.close, i);
+        continue;
+      }
+      // 최대 손실 도달 → 강제 손절
+      if (advancedSLEnabled && priceChange <= -advancedSL) {
+        closePosition(p, candle.close, i);
+        continue;
+      }
+      // 최대 보유기간 초과 → 강제 청산
+      if (advancedMaxDurationEnabled && holdDuration >= advancedMaxDuration) {
+        closePosition(p, candle.close, i);
+        continue;
+      }
+    }
+    
+    // 4) 시그널 함수 호출
     // openPositions의 읽기 전용 복사본 전달
     const posSnapshot = openPositions.map(p => ({
       side: p.side.toLowerCase(),       // 'long' or 'short' (소문자 — AI 코드 호환)
@@ -318,7 +350,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
     
     if (!signal || !signal.action) signal = { action: 'hold' };
     
-    // 4) 시그널 실행
+    // 5) 시그널 실행
     switch (signal.action) {
       case 'entry_long': {
         const type = signal.type || 'market';
@@ -385,7 +417,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
         break;
     }
     
-    // 5) 에쿼티 커브 기록
+    // 6) 에쿼티 커브 기록
     equity = balance;
     for (const pos of openPositions) {
       if (pos.side === 'LONG') {
