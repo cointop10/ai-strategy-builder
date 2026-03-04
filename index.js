@@ -221,8 +221,24 @@ function signal(candles, i, indicators, params, openPositions) {
 - If vague description: create sensible strategy using ALL selected indicators
 - BE CONCISE - signal function under 2000 tokens
 - Respond in SAME LANGUAGE as description for labels
+- ALWAYS include getSignal function after signal function
 
-Return ONLY valid JSON.`
+**FORWARD TEST INTERFACE (REQUIRED):**
+After signal function, add this exact function:
+function getSignal(candles, settings) {
+  // candles = full array, use last N candles same as signal entry logic
+  // MUST return one of:
+  // { direction: 'long', stopPrice: 12345.6, orderType: 'STOP' }
+  // { direction: 'short', stopPrice: 12345.6, orderType: 'LIMIT' }
+  // { direction: null }
+  // orderType: STOP for breakout, LIMIT for pullback
+}
+
+Return ONLY valid JSON:
+{
+  "js_code": "function signal(candles, i, indicators, params, openPositions) { ... }\n\nfunction getSignal(candles, settings) { ... }",
+  "parameters": { ... }
+}`
         }]
       })
     });
@@ -426,8 +442,25 @@ ${mq_code.substring(0, 50000)}
 2. TP/SL logic → include as exit conditions in signal function
 3. Check null: if (val === null) return { action: 'hold' };
 4. Parameters: { "type":"number", "default":14, "min":1, "max":200, "step":1, "label":"Name", "category":"strategy" }
+5. ALWAYS include getSignal function after signal function
 
-Return ONLY valid JSON.`
+**FORWARD TEST INTERFACE (REQUIRED):**
+After signal function, add this exact function:
+function getSignal(candles, settings) {
+  // candles = full array, use last N candles same as signal entry logic
+  // MUST return one of:
+  // { direction: 'long', stopPrice: 12345.6, orderType: 'STOP' }
+  // { direction: 'short', stopPrice: 12345.6, orderType: 'LIMIT' }
+  // { direction: null }
+  // orderType: STOP for breakout, LIMIT for pullback
+}
+
+Return ONLY valid JSON:
+{
+  "js_code": "function signal(...) { ... }\n\nfunction getSignal(candles, settings) { ... }",
+  "parameters": { ... },
+  "ea_name": "extracted name"
+}`
         }]
       })
     });
