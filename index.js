@@ -40,11 +40,11 @@ app.post('/api/preview-strategy', async (req, res) => {
           role: 'user',
           content: `Analyze this trading strategy request. Return ONLY JSON, no markdown.
 
-Indicators: ${indicatorsList}
+Selected Indicators: ${indicatorsList}
 Description: "${strategy_description}"
 
 If valid trading strategy:
-{"valid":true,"buy":"buy condition summary","sell":"sell condition summary","tp":"take profit (or 'Not specified')","sl":"stop loss (or 'Not specified')","extra":"other info or null"}
+{"valid":true,"buy":"buy condition summary","sell":"sell condition summary","tp":"take profit (or 'Not specified')","sl":"stop loss (or 'Not specified')","extra":"other info or null","mismatch":["indicator name mentioned in description but NOT in selected list"] or []}
 
 If nonsensical/gibberish/not a trading strategy (random characters, unrelated topics):
 {"valid":false,"reason":"Brief reason why"}
@@ -54,7 +54,7 @@ IMPORTANT: Vague but valid requests like "make a scalping strategy", "you decide
 Rules:
 - Respond in SAME LANGUAGE as the description
 - Be concise: 1-2 sentences each field
-- If description mentions indicators not in the selected list, still summarize
+- mismatch: list indicator names that appear in the description but are NOT in the Selected Indicators list. If none, return [].
 - TP/SL: extract exact % or values if mentioned. If user says "you decide" or delegates to AI, recommend reasonable defaults (e.g., TP 3-5%, SL 1-2%)`
         }]
       })
@@ -112,7 +112,7 @@ app.post('/api/generate-strategy', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 6000,
+        max_tokens: 8000,
         messages: [{
           role: 'user',
           content: `You are an expert crypto trading strategy developer. Generate a SIGNAL FUNCTION ONLY based on the user's description.
