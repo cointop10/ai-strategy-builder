@@ -201,11 +201,18 @@ function signal(candles, i, indicators, params, openPositions) {
 
 **RULES:**
 1. Your function ONLY decides WHEN to buy/sell/exit. Nothing else.
-2. Use pre-calculated indicators - do NOT recalculate them.
-3. For custom periods: indicators._calc.ema(indicators._raw.closes, params.emaPeriod)
-4. Check null values: if (indicators.rsi[14][i] === null) return { action: 'hold' };
-5. openPositions.length > 0 means position is open
-6. type defaults to 'market' if omitted
+2. Use ONLY pre-calculated indicators from the list above - do NOT recalculate them.
+3. ALWAYS check null before using any indicator: if (!indicators.rsi[14] || indicators.rsi[14][i] === null) return { action: 'hold' };
+4. Check null for ALL indicators used, at the TOP of the function before any logic.
+5. openPositions.length > 0 means position is open. Do NOT enter if already in position (unless pyramiding intended).
+6. Use EXACT accessor paths from the list above. Examples:
+   - RSI: indicators.rsi[14][i]  ← NOT indicators.rsi[i]
+   - MACD: indicators.macd['12_26_9'].macd[i]  ← NOT indicators.macd.macd[i]
+   - BB: indicators.bb['20_2'].upper[i]  ← NOT indicators.bb.upper[i]
+   - Stoch: indicators.stoch['14_3'].k[i]  ← NOT indicators.stoch.k[i]
+   - EMA: indicators.ema[20][i]  ← NOT indicators.ema[i]
+7. i must be >= 1 to compare with previous candle (i-1). Add: if (i < 1) return { action: 'hold' };
+8. type defaults to 'market' if omitted.
 
 **Parameters Format:**
 {
@@ -219,14 +226,32 @@ function signal(candles, i, indicators, params, openPositions) {
 - category must be "strategy" for all params
 - DO NOT include leverage/equityPercent/feePercent
 - If vague description: create sensible strategy using ALL selected indicators
-- BE CONCISE - signal function under 2000 tokens
 - Respond in SAME LANGUAGE as description for labels
 - ALWAYS include getSignal function after signal function
+- Martingale/position sizing requests: implement as entry frequency logic (more signals after losses) since sizing is handled externally
+
+**SIGNAL FUNCTION TEMPLATE - follow this structure:**
+function signal(candles, i, indicators, params, openPositions) {
+  if (i < 1) return { action: 'hold' };
+  // null checks first
+  if (!indicators.rsi[14] || indicators.rsi[14][i] === null) return { action: 'hold' };
+  // ... more null checks ...
+  
+  const rsi = indicators.rsi[14][i];
+  // ... assign variables ...
+  
+  if (openPositions.length === 0) {
+    // entry logic
+  } else {
+    // exit logic
+  }
+  return { action: 'hold' };
+}
 
 **FORWARD TEST INTERFACE (REQUIRED):**
 After signal function, add this exact function:
 function getSignal(candles, settings) {
-  // candles = full array, use last N candles same as signal entry logic
+  // Re-implement entry logic using last candles
   // MUST return one of:
   // { direction: 'long', stopPrice: 12345.6, orderType: 'STOP' }
   // { direction: 'short', stopPrice: 12345.6, orderType: 'LIMIT' }
@@ -234,7 +259,7 @@ function getSignal(candles, settings) {
   // orderType: STOP for breakout, LIMIT for pullback
 }
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown, no code blocks):
 {
   "js_code": "function signal(candles, i, indicators, params, openPositions) { ... }\n\nfunction getSignal(candles, settings) { ... }",
   "parameters": { ... }
