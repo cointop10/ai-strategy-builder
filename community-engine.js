@@ -63,27 +63,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
   const isLargeCap = symbol.includes('BTC') || symbol.includes('ETH');
   const effectiveMaxPosition = Math.min(maxPositionUSDT, isLargeCap ? 10000000 : 1000000);
 
-  // ========== 하이킨 아시 변환 (옵션) ==========
-  function toHeikinAshi(rawCandles) {
-    const ha = [];
-    for (let i = 0; i < rawCandles.length; i++) {
-      const c = rawCandles[i];
-      const haClose = (c.open + c.high + c.low + c.close) / 4;
-      const haOpen = i === 0
-        ? (c.open + c.close) / 2
-        : (ha[i - 1].open + ha[i - 1].close) / 2;
-      const haHigh = Math.max(c.high, haOpen, haClose);
-      const haLow  = Math.min(c.low,  haOpen, haClose);
-      ha.push({ timestamp: c.timestamp, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: c.volume });
-    }
-    return ha;
-  }
-
-  const heikinAshi = settings.heikinAshi || false;
-  const workCandles = heikinAshi ? toHeikinAshi(candles) : candles;
-
   // ========== 보조지표 사전 계산 ==========
-  const indicators = preCalculateIndicators(workCandles);
+  const indicators = preCalculateIndicators(candles);
 
   // ========== 상태 변수 ==========
   let balance = initialBalance;
@@ -158,7 +139,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
       id: trades.length + openPositions.length,
       side: actualSide,
       entry_price: price,
-      entry_time: workCandles[candleIndex].timestamp,
+      entry_time: candles[candleIndex].timestamp,
       entry_index: candleIndex,
       coin_size: size.coins,
       usdt_size: size.usdt,
@@ -209,7 +190,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
     const trade = {
       entry_time: pos.entry_time,
       entry_price: pos.entry_price,
-      exit_time: workCandles[candleIndex].timestamp,
+      exit_time: candles[candleIndex].timestamp,
       exit_price: price,
       side: pos.side,
       pnl: parseFloat(pnl.toFixed(2)),
@@ -272,8 +253,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
   const startIndex = 200; // 보조지표 워밍업
   let debugCounts = { total: 0 };
   
-  for (let i = startIndex; i < workCandles.length; i++) {
-    const candle = workCandles[i];
+  for (let i = startIndex; i < candles.length; i++) {
+    const candle = candles[i];
     
     // 볼륨 필터
     if (volumeFilter > 0 && (candle.volume || 0) < volumeFilter) {
@@ -360,7 +341,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
     
     let signal;
     try {
-      signal = signalFn(workCandles, i, indicators, params, posSnapshot);
+      signal = signalFn(candles, i, indicators, params, posSnapshot);
       // 시그널 카운트
       debugCounts.total++;
       if (signal && signal.action !== 'hold') {
@@ -468,8 +449,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
   
   // ========== 마지막: 열린 포지션 정리 (선택) ==========
   if (openPositions.length > 0 && candles.length > 0) {
-    const lastCandle = workCandles[workCandles.length - 1];
-    closeAllPositions(lastCandle.close, workCandles.length - 1);
+    const lastCandle = candles[candles.length - 1];
+    closeAllPositions(lastCandle.close, candles.length - 1);
   }
   
   // ========== 결과 포맷 ==========
