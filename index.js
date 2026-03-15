@@ -434,10 +434,11 @@ ${mq_code.substring(0, 50000)}
 - OrderClose → exit | OrdersTotal() → openPositions.length
 
 **Rules:**
-1. Always null-check: if (i < 1) return {action:'hold'}; if (!indicators.rsi[14] || indicators.rsi[14][i]===null) return {action:'hold'};
-2. Use EXACT accessor paths.
-3. Parameters: { "type":"number","default":14,"min":1,"max":200,"step":1,"label":"English","label_ko":"한국어","label_zh":"中文","label_hi":"हिन्दी","label_es":"Español","label_fr":"Français","label_ar":"العربية","label_bn":"বাংলা","label_ru":"Русский","label_pt":"Português","label_ur":"اردو","label_id":"Bahasa Indonesia","label_de":"Deutsch","label_ja":"日本語","label_tr":"Türkçe","label_vi":"Tiếng Việt","label_it":"Italiano","label_th":"ภาษาไทย","label_ms":"Bahasa Melayu","category":"strategy" }
-4. ALWAYS include getSignal function.
+1. EXACT function signature MUST BE: function signal(candles, i, indicators, params, openPositions) — use params.xxx NOT settings.xxx
+2. Always null-check: if (i < 1) return {action:'hold'}; if (!indicators.rsi[14] || indicators.rsi[14][i]===null) return {action:'hold'};
+3. Use EXACT accessor paths.
+4. Parameters: { "type":"number","default":14,"min":1,"max":200,"step":1,"label":"English","label_ko":"한국어","label_zh":"中文","label_hi":"हिन्दी","label_es":"Español","label_fr":"Français","label_ar":"العربية","label_bn":"বাংলা","label_ru":"Русский","label_pt":"Português","label_ur":"اردو","label_id":"Bahasa Indonesia","label_de":"Deutsch","label_ja":"日本語","label_tr":"Türkçe","label_vi":"Tiếng Việt","label_it":"Italiano","label_th":"ภาษาไทย","label_ms":"Bahasa Melayu","category":"strategy" }
+5. ALWAYS include getSignal function.
 
 **FORWARD TEST (REQUIRED):**
 function getSignal(candles, settings) {
@@ -446,7 +447,7 @@ function getSignal(candles, settings) {
 
 Return ONLY valid JSON (no markdown):
 {
-  "js_code": "function signal(...){...}\\n\\nfunction getSignal(candles,settings){...}",
+  "js_code": "function signal(candles, i, indicators, params, openPositions) { ... }\\n\\nfunction getSignal(candles, settings) { ... }",
   "parameters": {...},
   "ea_name": "extracted EA name"
 }`;
