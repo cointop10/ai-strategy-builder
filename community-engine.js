@@ -102,7 +102,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
   }
 
   // 포지션 열기
-  function openPosition(side, price, candleIndex, orderType = 'MARKET') {
+  function openPosition(side, price, candleIndex, orderType = 'MARKET', sizeMultiplier = 1) {
     // reverse 모드면 방향 반전
     const actualSide = reverse ? (side === 'LONG' ? 'SHORT' : 'LONG') : side;
     
@@ -114,8 +114,18 @@ function runCommunityBacktest(signalFn, candles, settings) {
     // 동시 주문 수 제한
     if (openPositions.length >= maxConcurrentOrders) return null;
     
-    const size = calcPositionSize(price);
-    if (size.usdt === 0) return null;
+    const baseSize = calcPositionSize(price);
+    if (baseSize.usdt === 0) return null;
+    
+    // sizeMultiplier 적용 (마틴게일 등) — 최소 0.1x, 최대 10x 클램핑
+    const multiplier = Math.min(Math.max(parseFloat(sizeMultiplier) || 1, 0.1), 10);
+    const rawMultiplied = baseSize.usdt * multiplier;
+    const size = {
+      usdt: Math.min(Math.floor(rawMultiplied / 100) * 100, effectiveMaxPosition),
+      coins: 0,
+    };
+    if (size.usdt < 100) size.usdt = baseSize.usdt; // fallback
+    size.coins = size.usdt / price;
     
     const entryFee = size.usdt * fee;
     balance -= entryFee;
@@ -233,7 +243,7 @@ function runCommunityBacktest(signalFn, candles, settings) {
           (side === 'LONG' ? 'BUY STOP' : 'SELL STOP') :
           (side === 'LONG' ? 'BUY LIMIT' : 'SELL LIMIT');
         
-        openPosition(side, order.price, candleIndex, orderType);
+        openPosition(side, order.price, candleIndex, orderType, order.sizeMultiplier || 1);
         pendingOrders.splice(p, 1);
       }
     }
@@ -308,8 +318,8 @@ function runCommunityBacktest(signalFn, candles, settings) {
     // 4) 시그널 함수 호출
     // openPositions의 읽기 전용 복사본 전달
     const posSnapshot = openPositions.map(p => ({
-      side: p.side.toLowerCase(),       // 'long' or 'short' (소문자 — AI 코드 호환)
-      SIDE: p.side,                     // 'LONG' or 'SHORT' (대문자 — 혹시 모를 호환)
+      side: p.side.toLowerCase(),
+      SIDE: p.side,
       entry_price: p.entry_price,
       coin_size: p.coin_size,
       usdt_size: p.usdt_size,
@@ -318,6 +328,16 @@ function runCommunityBacktest(signalFn, candles, settings) {
         : (p.entry_price - candle.close) / p.entry_price * p.usdt_size,
       duration: i - p.entry_index,
     }));
+    
+    // 연속 손실 횟수 계산 (마틴게일 등에서 사용)
+    let consecutiveLosses = 0;
+    for (let t = trades.length - 1; t >= 0; t--) {
+      if (trades[t].pnl < 0) consecutiveLosses++;
+      else break;
+    }
+    posSnapshot.consecutiveLosses = consecutiveLosses;
+    posSnapshot.totalTrades = trades.length;
+    posSnapshot.lastPnl = trades.length > 0 ? trades[trades.length - 1].pnl : 0;
     
     let signal;
     try {
@@ -339,15 +359,17 @@ function runCommunityBacktest(signalFn, candles, settings) {
       case 'entry_long': {
         const type = signal.type || 'market';
         const price = signal.price || candle.close;
+        const multiplier = signal.sizeMultiplier || 1;
         
         if (type === 'market') {
-          openPosition('LONG', candle.close, i, 'MARKET');
+          openPosition('LONG', candle.close, i, 'MARKET', multiplier);
         } else {
           // stop 또는 limit → 대기 주문 등록
           pendingOrders.push({
             action: 'entry_long',
             type,
             price,
+            sizeMultiplier: multiplier,
             createdAt: i,
           });
         }
@@ -357,14 +379,16 @@ function runCommunityBacktest(signalFn, candles, settings) {
       case 'entry_short': {
         const type = signal.type || 'market';
         const price = signal.price || candle.close;
+        const multiplier = signal.sizeMultiplier || 1;
         
         if (type === 'market') {
-          openPosition('SHORT', candle.close, i, 'MARKET');
+          openPosition('SHORT', candle.close, i, 'MARKET', multiplier);
         } else {
           pendingOrders.push({
             action: 'entry_short',
             type,
             price,
+            sizeMultiplier: multiplier,
             createdAt: i,
           });
         }
